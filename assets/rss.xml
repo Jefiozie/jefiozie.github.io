@@ -1,0 +1,643 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom">
+    <channel>
+        <title>RSS Feed</title>
+        <link>https://jefiozie.github.io</link>
+        <description>This is my personal feed!</description>
+        <lastBuildDate>Mon, 12 Jul 2021 06:07:21 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>Scully RSS</generator>
+        <copyright>All rights reserved 2021, Jeffrey Bosch</copyright>
+        <atom:link href="https://jefiozie.github.io/assets/rss.xml" rel="self" type="application/rss+xml"/>
+        <item>
+            <title><![CDATA[Create a Custom Angular CLI Builder]]></title>
+            <guid>https://jefiozie.github.io/articles/article/angular-builders</guid>
+            <pubDate>Mon, 22 Mar 2021 00:00:00 GMT</pubDate>
+            <description><![CDATA[A article on who to create a Angular CLI Builder]]></description>
+            <content:encoded><![CDATA[<hr />
+<p>title: 'Create a Custom Angular CLI Builder'
+description: 'A article on who to create a Angular CLI Builder'
+date: '2021-03-22'
+tags:
+    - angular
+    - builders
+    - cli
+    - showdev</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>In this post, we will try to explain the basics theory around the Angular CLI builders and how you can build a Custom Builder. How to build a Custom Builder will be done based on a builder we've created with a very general use case, Image Optimization. In this article we will only show a simple example.</p>
+<h1 id="history">History</h1>
+<p>Back in the day, before Angular CLI version 8 the supported method to <code>customize</code> the Angular CLI was <code>ng eject</code>. When using this command we would say against the Angular CLI that we as developers would handle the configuration. Maybe you didn't know but under the hood of the Angular CLI is using Webpack. So when we did run the command the Angular CLI would <code>eject</code> the Webpack configuration to a file that we can change. Of course, this works, but you needed to know how and what to exactly change for your needs and the Webpack can be (in my opinion) a bit overwhelming when you look at it.</p>
+<h1 id="theangularclitoday">The Angular CLI today</h1>
+<p>As mentioned in the <code>History</code> of the Angular CLI when writing this post we are at version 11 and a lot has been changed. The <code>ng eject</code> command is removed from the Angular CLI. Since Angular CLI version 8 something new has made its place. This new part is called the <em>Builders</em> API. The Builders API makes it easy to extend general parts like <code>ng build</code>, <code>ng serve</code>, or make a custom CLI command like <code>ng run mybuilder:app</code>.</p>
+<h1 id="thebuildersweusetodayeveryday">The builders we use today, every day!</h1>
+<p>Did you ever wondered what is happening when we use <code>ng build</code> or <code>ng serve</code>? The Angular CLI will start a new task based on the <code>angular.json</code> file. 
+First, it will examine the <code>angular.json</code> looking for the project, in a single app set up this will be always the default application. </p>
+<p><img src="/assets/builders/angularjson.png" alt="angular.json file" width=600 /></p>
+<p>When this project has been found, it will look at the target, in our example, this target is <code>build</code>.
+Now the Angular CLI knows enough to execute the builder! 
+Below I've made a simple table that shows what builders are represented with a default Angular CLI command:</p>
+<p>| Command  | Builder  | |
+|---|---|---|
+| build  | Browser builder | |
+| serve  | Dev-Server builder | |
+| test  | Karma builder  | |
+| lint | TSLint builder  | ❗ this builder is deprecated from Angular v12 |
+| e2e| Protractor   | |</p>
+<h1 id="sowhatisabuilderthen">So what is a builder then</h1>
+<p>Before I'm going to provide you with my explanation of builders, let's have a look at the docs.</p>
+<pre><code>Several Angular CLI commands run a complex process on your code, such as linting, building, or testing.
+The commands use an internal tool called Architect to run CLI builders, which apply another tool to accomplish the desired task. 
+With Angular version 8, the CLI Builder API is stable and available to developers who want to customize the Angular CLI by adding or modifying commands. 
+For example, you could supply a builder to perform an entirely new task or to change which third-party tool is used by an existing command.
+</code></pre>
+<p>After reading this I made the following conclusion: </p>
+<blockquote>
+  <p><em>As a Angular Builder is just a function, you could refer it is a task. The Angular CLI is having an task-based system. This way we can say that the Angular CLI with the task-based system (called Architect) is delegating the tasks (builders).</em> </p>
+</blockquote>
+<p>For me, this made it easy in my mind to link specific commands to tasks and know that they are executed with specific commands provided by the Angular CLI.</p>
+<h1 id="howtocreateacustombuilder">How to create a custom builder?</h1>
+<p>Now that we've come to the part where we are going to look at the custom builder we first need to set up the project structure.
+Below a couple of minimal steps we need to take before we can continue with our builder: </p>
+<ol>
+<li>Npm init</li>
+<li>Git init</li>
+<li>Add dependencies (minimal needed):<ul>
+<li>Typescript</li>
+<li>@angular-devkit/architect</li></ul></li>
+<li>Add some npm scripts for building and testing our package</li>
+<li>Add a “builder.json” file</li>
+<li>Add "builders": "builders.json" to your package.json</li>
+<li>Add an “index.ts” file</li>
+</ol>
+<p>Our project structure is complete (<a href="https://github.com/Jefiozie/imagization">see a full example</a>)! Now we are going to create the <code>Builder</code>, in our next article we will address how you can use/connect your custom builder with the Angular CLI.
+The Angular CLI team has provided an easy way to set up our custom builder so that it can be executed with the Angular CLI. We need to import the <code>createBuilder</code> function. The <code>createBuilder</code> function is hooking up the task-based system from within the Angular CLI and lets you use your custom builder.</p>
+<pre><code class="ts language-ts">import { createBuilder, BuilderContext, BuilderOutput } from '@angular-devkit/architect'
+
+// Schema Options
+interface Options extends JsonObject {...}
+
+// Our func. that is executed by the tasked based system
+function customBuilderFunc(
+  options: Options,
+  context: BuilderContext,
+  ): Promise&lt;BuilderOutput&gt; {
+    // logging the message
+    context.reportStatus(`Executing Custom Builder`);
+    return new Promise(resolve =&gt; {
+        // log message when we are done
+      context.reportStatus(`Done running Custom Builder 🎉`);
+    });
+}
+
+export default createBuilder(customBuilderFunc);
+</code></pre>
+<h1 id="summary">Summary</h1>
+<p>Builders are a very useful part of the Angular CLI that will make sure the CLI is very extensible. We can use builders for a variety of tasks that are related to the workspace(s). As builders are just functions we can do "ANYTHING". I've created a "demo" builder that is optimizing images in your workspace for better web performance. This builder will be in our next article where we will go a little bit deeper into, creating custom builders and how to hook them into your workspace. You can already have a look <a href="https://github.com/Jefiozie/imagization">here</a></p>
+<p>I hope you've enjoyed this article, all of this are from my personal experience. If you have any questions around builder you can always DM me on <a href="https://twitter.com/jefiozie">@jefiozie</a></p>
+<h1 id="resources">Resources</h1>
+<p>Below I've added some helpful resources that you can have a look at if you're interested in builders.</p>
+<ul>
+<li><a href="https://angular.io/guide/cli-builder">Angular.io - CLI Builders</a></li>
+<li><a href="https://angular-builders.dev/">Angular Builder by Santosh Yadav</a></li>
+<li><a href="https://youtu.be/HyvZ26ofTvY">Deep Dive Into CLI Builders by Mike Hartington</a></li>
+<li><a href="http://github.com/xlayers/version-stamp">Version stamp by the xLayers team</a> </li>
+<li><a href="https://github.com/Jefiozie/ngx-aws-deploy">ngx-aws-deploy by Jeffrey Bosch</a></li>
+<li><a href="https://github.com/bampakoa/ngx-electronify">ngx-electronify by Aristeidis Bampakos</a> </li>
+</ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Deploy your Angular app with Scully and Cloudflare Pages]]></title>
+            <guid>https://jefiozie.github.io/articles/article/deploy-scully-cloudflare</guid>
+            <pubDate>Mon, 15 Mar 2021 00:00:00 GMT</pubDate>
+            <description><![CDATA[Deploy your Angular app with Scully and Cloudflare Pages]]></description>
+            <content:encoded><![CDATA[<hr />
+<p>title: 'Deploy your Angular app with Scully and Cloudflare Pages'
+description: 'Deploy your Angular app with Scully and Cloudflare Pages'
+date: '2021-03-15'
+tags:
+    - angular
+    - scully
+    - cloudflare
+    - showdev</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>In this article, we will introduce you to Scully and explain how to deploy your Angular app with Scully to Cloudflare pages.
+This article is for people who are interested in setting up a JAMstack app with Angular, Scully, and Cloudflare pages.</p>
+<pre>
+ ❗ Pre-requisites ❗
+
+- You should have some basic knowledge of Angular
+- You should have a Cloudflare account
+- You should have a Github account
+</pre>
+<h1 id="whatiscloudflarepages">What is Cloudflare pages</h1>
+<p>Cloudflare Pages is the solution for people that use JAMstack frameworks. Cloudflare Pages easily integrates with Github in a way that when you push a new version, Cloudflare automatically starts building and deploying your app on its network.</p>
+<p>If you’re not familiar with JAMstack, it’s a popular way of developing and deploying websites at scale. You can look at this resource for more information about the JAMstack <a href="https://Jamstack.org/">link</a></p>
+<p>Coming back to Cloudflare Pages, as we said earlier it integrates with GitHub repositories if you’re hosting your source code on that platform. Once your site is configured, you can preview each commit from Cloudflare’s interface — each commit gets a unique URL and there’s a preview environment.</p>
+<p>You can collaborate with other Cloudflare users by inviting them to your Pages project. When your site looks good in the preview branch, you can push it to the production branch.</p>
+<p>So in summary, Cloudflare Pages lets you easily deploy your app without any hustle.</p>
+<h1 id="setupyourangularappwithscully">Setup your Angular app with Scully</h1>
+<p>Before we set up our Angular app, let's have a quick look at Scully.</p>
+<p>Scully is the best static site generator for Angular projects looking to embrace the JAMstack.
+It will use your application and will create a static <code>index.html</code> for each of your pages/routes. Every <code>index.html</code> will have the content already there, and this will make your application show instantly for the user. Also, this will make your application very SEO-friendly. On top of this, your SPA will still function as it did before.
+A big advance of Scully is that it has an easy-to-use and extendible plugins system that will allow you to manipulate routes and content.</p>
+<p>For this article, we will set up a really simple app, just so we can learn about Cloudflare Pages.</p>
+<p>Before we are get started, go to Github and create a new repo, you can also go to <code>https://repo.new</code> this is an easy way to create a new repository at Github.</p>
+<p>Clone the repo to your local machine, now let's continue by setting up a new Angular project.</p>
+<pre><code class="bash language-bash">npm install -g @angular/cli
+ng new &lt;YOUR-PROJECT-NAME&gt; --routing
+</code></pre>
+<p>By running the command above we will be provided with a simple Angular app with a router module. When the Angular CLI is finished, we will have a fresh Angular workspace, with a pre-filled demo Angular app.</p>
+<p>Let's continue by adding Scully, the Scully team has made this easy for us, we only need to run the following command:</p>
+<pre><code class="bash language-bash">ng add @scullyio/init
+
+--- output should be something like below ---
+
+Installing packages for tooling via npm.
+Installed packages for tooling via npm.
+    Install ng-lib
+    ✅️ Added dependency
+UPDATE src/app/app.module.ts (466 bytes)
+UPDATE src/polyfills.ts (3019 bytes)
+UPDATE package.json (1310 bytes)
+- Installing packages (npm)...
+√ Packages installed successfully.
+    ✅️ Update package.json
+    ✅️ Created scully configuration file in scully.demo-cloudflare-pages.confts
+CREATE scully.demo-cloudflare-pages.config.ts (196 bytes)
+UPDATE package.json (1384 bytes)
+CREATE scully/tsconfig.json (450 bytes)
+CREATE scully/plugins/plugin.ts (305 bytes)
+</code></pre>
+<p>We are now ready to use Scully with Angular, to do this we first need to build the Angular project. This can be done by running:</p>
+<pre><code class="bash language-bash">ng build --prod
+</code></pre>
+<p>Now that the Angular project is built, Scully can do its work. Run Scully with the following command:</p>
+<pre><code class="bash language-bash">npx scully
+</code></pre>
+<p>We did it! We turned your Angular app into a pre-rendered static site, we can now push our changes to our Github repo.</p>
+<h1 id="setupyourrepositoryforcloudflarepages">Setup your repository for Cloudflare pages</h1>
+<p>We are now ready to connect or freshly created app with Cloudflare pages. </p>
+<ol>
+<li>Go to your Cloudflare account</li>
+<li>On the right, click on Pages</li>
+</ol>
+<p><img src="./assets/cloudflare/cloudflare_menu.png" alt="Preview of Cloudflare menu" /></p>
+<ol start="3">
+<li>Click on "Create a project"</li>
+</ol>
+<p><img src="./assets/cloudflare/cloudflare_create_project.png" alt="Preview of Cloudflare Create a project" /></p>
+<ol start="4">
+<li>Connect your Github account</li>
+</ol>
+<p><img src="./assets/cloudflare/connect_github.png" alt="Preview of Connect Github" /></p>
+<ol start="5">
+<li><p>When you successfully connected to Github, you can choose a repository. In our example, I'm selecting <code>demo-cloudflare-pages</code></p></li>
+<li><p>After selecting the project, click on <strong>Begin Setup</strong></p></li>
+<li><p>Scroll to <em>Build Settings</em> and fill in the same setting as the picture below</p></li>
+</ol>
+<p><img src="./assets/cloudflare/build_settings.png" alt="Preview of Build settings" /></p>
+<ol start="8">
+<li>CLick on <em>Deploy</em></li>
+<li>Cloudflare will start working on building your app, this will fail, this is intended, don't worry we will fix it in the next chapter.</li>
+</ol>
+<h1 id="deployitwithcloudflarepages">Deploy it with Cloudflare pages</h1>
+<p>We are almost ready to deploy our app, in the previous part we configured everything to be ready for deployment. But we still need to tweak a couple of things before we can use Cloudflare pages. So let's make these changes!</p>
+<ol>
+<li>Open your package.json file and add the following snippet to the <code>scripts</code>:</li>
+</ol>
+<pre><code class="json language-json">    "buildStaticApp": "ng build --prod &amp;&amp; npx scully --scanRoutes"
+</code></pre>
+<ol start="2">
+<li>Open up your scully configuration file, in our case <code>scully.demo-cloudflare-pages.config.ts</code></li>
+<li>Add the following snippet to the configuration:</li>
+</ol>
+<pre><code class="json language-json">puppeteerLaunchOptions: {
+    args: [
+      '--disable-gpu',
+      '--renderer',
+      '--no-sandbox',
+      '--no-service-autorun',
+      '--no-experiments',
+      '--no-default-browser-check',
+      '--disable-dev-shm-usage',
+      '--disable-setuid-sandbox',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-extensions',
+    ],
+  }
+</code></pre>
+<p>These changes are needed as Cloudflare runs in a VM or Docker, and we cannot have a "real" chromium spin up. This way we make sure that the bare minimum is enabled for puppeteer so that it can run in the VM or Docker.</p>
+<ol start="4">
+<li><p>Now commit and push the changes to the Github repo</p></li>
+<li><p>Cloudflare will automatically pick up the changes, let's go back to our Cloudflare project and we will see it is building our app:</p></li>
+</ol>
+<p><img src="./assets/cloudflare/cloudflare_building.png" alt="Preview of Build settings" /></p>
+<ol start="6">
+<li>If everything goes well, we have successfully deployed our app!! </li>
+</ol>
+<p><img src="./assets/cloudflare/cloudflare_deploy.png" alt="Preview of Build settings" /></p>
+<h1 id="summary">Summary</h1>
+<p>In this article, we have made our Angular app a JAMstack app with the help of Scully and deployed it with Cloudflare pages! Below are some resources that I found helpful when using Cloudflare pages and Scully. You can find the example repo <a href="https://github.com/Jefiozie/demo-cloudflare-pages">here</a>.</p>
+<p>If you have any questions send me DM via my twitter profile <a href="https://twitter.com/jefiozie">@jefiozie</a></p>
+<h1 id="resources">Resources</h1>
+<ul>
+<li><a href="https://github.com/Jefiozie/demo-cloudflare-pages">Repository</a></li>
+<li><a href="https://scully.io/">Scully</a></li>
+<li><a href="https://pages.cloudflare.com/">Cloudflare Pages</a></li>
+</ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Automate your community website easily with automation and Scully]]></title>
+            <guid>https://jefiozie.github.io/articles/article/automate-community-website</guid>
+            <pubDate>Sun, 29 Nov 2020 00:00:00 GMT</pubDate>
+            <description><![CDATA[You can update your community website easily with automation and Scully]]></description>
+            <content:encoded><![CDATA[<hr />
+<p>title: 'Automate your community website easily with automation and Scully'
+description: You can update your community website easily with automation and Scully
+date: '2020-11-29'
+tags:</p>
+<ul>
+<li>angular</li>
+<li>scully</li>
+<li>automation</li>
+<li>showdev</li>
+</ul>
+<h2 id="publishedtrue">published: true</h2>
+<p>Last year I've joined the Dutch Angular Group as an Organizer and I can say I love it! 💖
+Before I'm starting with my blog post I would like to give a shoutout to my fellow co-organizers and especially the founder of the Dutch Angular Group <a href="https://twitter.com/esosanderelias">Sander Elias</a> and <a href="https://twitter.com/bonnster75">Bonnie Brennan</a> for the introductions and faith in me.</p>
+<p>Thank you for letting me be a part of the DAG Community and have the privilege to help, show and organize great events where people can learn 🙏🏻</p>
+<h1 id="howitallstarted">How it all started</h1>
+<p>As a community group, we have had a custom domain name for several years, but in the last couple of years, we have never used it. Since the first beta of Scully, I've built a couple of POC and my blog with it. Based on my experience there I thought why not build something where our community can go, look at the schedule, have some general information about our group, and see our Code of Conduct.</p>
+<p>This is where my journey with a community website started, but this is not the place where I thought about automation.</p>
+<h1 id="letsautomatethings">Let's automate things</h1>
+<p>When I started with the organization of the DAG events, I didn't know anything about how to organize something, where to start, did we need a monthly schedule? All these things were new for me so with our organizer's team we just started by planning <em>one</em> event. But, then came COVID-19, so we needed to adjust to the regulation, we quickly adopted a streaming service what we could use to do our first online session. It was a great adventure and I just made some quick Artwork for the announcements on our Meetup group. I have to say, I was pretty excited, my first organized event with two GDE's! 😎
+It went great!</p>
+<p>After organizing 5 events, It occurred to me that I needed to do a repetitive task like every week for an event. Create an event, make artwork, twitter announcements, extra Twitter messages, etc.</p>
+<p>Last week I had some spare time and I thought let's see If I could automate some stuff so that I have less work to do for the organization.</p>
+<h2 id="howdidwedothis">How did we do this</h2>
+<p>Scully is a static site generator that will convert a normal Angular app to a static website. When I had the idea to build this, one of the requirements was to have our Meetup calendar placed on our website. As Scully has a really easy and great way to create custom plugins, we've created a <a href="https://www.npmjs.com/package/scully-plugin-meetup">Meetup plugin</a> that will look at your Meetup group and will get all the 100 latest events. With these 100 events, it will generate all these events in a specific way that we can use statically in our website.</p>
+<p>With this in place, the only missing part was to automate the deployment process. As Github has a great set of Actions to assist you we've used one of these to deploy our static content, however, Github Actions cannot do anything without being notified. Looking at our automation part we thought could we trigger a Github action by doing an HTTP request? And we found out that this is supported by Github Actions, you just need to add the following snippet to your Github workflow:</p>
+<pre><code class="yml language-yml">on:
+  repository_dispatch:
+    types:
+      - A EVENT NAME
+</code></pre>
+<p>By using Zapier we could now do a POST request to Github Actions to trigger our generation and deployment of our community website without doing any manual changes! If you would like to know about this specific part of Github Action, <a href="https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows#repository_dispatch">click here</a></p>
+<p><img src="./assets/zapier_deployment.png" alt="Preview of Meetup deployment automation" /></p>
+<h1 id="thankyouandstartusingtheplugin">Thank you and start using the plugin</h1>
+<p>Thank you for reading this post, feel free to DM me on <a href="https://twitter.com/jefiozie">Twitter</a></p>
+<p>I've made the plugin available for everybody to use, you can find it <a href="https://www.npmjs.com/package/scully-plugin-meetup">here</a></p>
+<h1 id="resources">Resources</h1>
+<ul>
+<li><a href="https://github.com/Dutch-Angular-Group/website/">Repository</a></li>
+<li><a href="https://github.com/Dutch-Angular-Group/website/tree/main/libs/scully-plugin-meetup">Repository of the plugin</a></li>
+<li><a href="https://dutchangular.org">Community Website</a></li>
+<li><a href="https://zapier.com">Zapier</a></li>
+<li><a href="https://scully.io/">Scully</a></li>
+</ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Introducing NGX-AWS-DEPLOY: easily deploy your Angular app to AWS S3 from the Angular CLI]]></title>
+            <guid>https://jefiozie.github.io/articles/article/ngx-aws-deploy</guid>
+            <pubDate>Mon, 13 Jan 2020 00:00:00 GMT</pubDate>
+            <content:encoded><![CDATA[<hr />
+<p>title: 'Introducing NGX-AWS-DEPLOY: easily deploy your Angular app to AWS S3 from the Angular CLI'
+date: '2020-01-13'
+tags: ['angular', 'builder', 'deploy aws']</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>We are very happy and excited to share with you a new Angular Builder: <a href="https://www.npmjs.com/package/@jefiozie/ngx-aws-deploy">NGX-AWS-DEPLOY</a></p>
+<h1 id="whatisanangularbuilder">What is an Angular Builder?</h1>
+<p>Most of you probably know that the Angular CLI has some CLI commands, sometimes these commands run a complex process, such as linting, building or testing. Internally they make use of the <em>Architect</em> tool to run CLI Builders. With Angular version 8, the CLI Builder API is stable and available to developers who want to customize the Angular CLI by adding or modifying commands.</p>
+<p>An Angular Builder is a function that will be executed by using a specific Angular CLI Command. Because you can run <strong>ANY</strong> command and can make <strong>ANY</strong> implementation you almost could say: <em>The sky is the limit by adopting Angular Builders</em></p>
+<h1 id="whatisanangulardeploymentbuilder">What is an Angular Deployment Builder?</h1>
+<p>In Angular CLI version 8.3 the Angular team added a new CLI command: <code>ng deploy</code>
+The existing builder APIs are still used, but the usage has been simplified.
+It has a very short syntax, because by default it will deploy the default project in the workspace.
+And the most important point: It is an invitation to the community to standardize deployments under the umbrella of the Angular CLI!</p>
+<h1 id="whyicreatedthisangularbuilder">Why I created this Angular Builder</h1>
+<p>I started the project because I was interested in the Angular Builders API. As I'm loving the way you could do a deployment of an Angular App by using <a href="http://github.com/Azure/ng-deploy-azure">@azure/ng-deploy</a>, I had the idea to do this for Amazon's S3 storage. In the past, I've done some work with Amazon and needed to do several steps to upload an Angular app to AWS S3. After looking at the AWS SDK and some examples on the documentation, I created the builder that we now call: <strong><em>NGX-AWS-DEPLOY</em></strong></p>
+<h1 id="howcanweuseit">How can we use it?</h1>
+<p>A builder must be configured for an existing Angular project. But don't worry! The installation is very simple, because you only have to execute the following command:</p>
+<pre><code class="bash language-bash">ng add @jefiozie/ngx-aws-deploy
+</code></pre>
+<p>By using the command it will install the package for you and ask you a couple of questions to setup the project.</p>
+<p><img src="./assets/questions.png" alt="Questions" /></p>
+<p>After this, you are ready to deploy your app to AWS S3, just run:</p>
+<pre><code class="bash language-bash">ng deploy
+</code></pre>
+<h1 id="roadmap">Roadmap?</h1>
+<p>What does the future bring for this package? I'm not sure yet, I would love to see some feature issues created by the community! Maybe there are use cases I've not yet thought of so please submit your issue or feature on the <a href="https://github.com/Jefiozie/ngx-aws-deploy">NGX-AWS-DEPLOY Repo</a></p>
+<p>Some of the ideas are:</p>
+<ol>
+<li>Credentials via environment variables <a href="https://github.com/Jefiozie/ngx-aws-deploy/issues/12">#12</a></li>
+<li>Multi-region upload</li>
+<li>Better progress indicator</li>
+<li>Allow compressing the app and upload it (maybe an edge case)</li>
+</ol>
+<h1 id="thankyou">Thank you</h1>
+<p>Thank you for reading this post. I hope you will enjoy <strong><em>NGX-AWS-DEPLOY</em></strong>. A big thanks to the Angular CLI team (and everybody who helped) with creating the builders API. I love it! 👍🏻</p>
+<p>Thanks to people who reviewed this article:</p>
+<ul>
+<li><a href="https://twitter.com/bjeaurn">@bjeaurn</a></li>
+<li><a href="https://twitter.com/JohannesHoppe">@JohannesHoppe</a></li>
+</ul>
+<h3 id="_resources_"><em>RESOURCES</em></h3>
+<ul>
+<li><a href="https://angular.io/guide/cli-builder">Angular CLI Builders</a></li>
+<li><a href="https://github.com/mgechev/cli-builders-demo">Example of CLI Builder</a></li>
+<li><a href="https://github.com/angular-schule/ngx-deploy-starter">ngx-deploy-starter</a></li>
+<li><a href="https://angular-builders.dev">Angular Builders - website with builders</a></li>
+<li><a href="https://medium.com/angular-in-depth/angular-cli-builder-26f0981fb7f3">InDepth - Angular Builders</a></li>
+</ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[Building a drawer with Stencil]]></title>
+            <guid>https://jefiozie.github.io/articles/article/build-a-drawer-with-stencil</guid>
+            <pubDate>Wed, 05 Jun 2019 00:00:00 GMT</pubDate>
+            <description><![CDATA[A simple way to build a drawer component with Stencil]]></description>
+            <content:encoded><![CDATA[<hr />
+<p>title: Building a drawer with Stencil
+description: A simple way to build a drawer component with Stencil
+tags: [Stencil, webcomponents, showdev, webdev]
+author: Jeffrey Bosch
+published: true</p>
+<h2 id="date20190605">date: '2019-06-05'</h2>
+<p>For the past couple of weeks, I've been working on a "Design System" that is using Stencil. Today I want to share some basics on how I build a drawer with Stencil, with you, the community 🙏🏻.</p>
+<h2 id="whatisadrawer">What is a drawer</h2>
+<p>A drawer is a component, designed to add collapsible side content (often navigation) alongside some content. Further, in this article, you will see the end result of our drawer (<em>that won't be a perfectly styled example</em>😆).</p>
+<h2 id="thearchitectureofthedrawer">The architecture of the drawer</h2>
+<p>Our drawer has three main parts:</p>
+<p><img src="./assets/drawer_architecture.png" alt="Preview of drawer architecture" /></p>
+<ul>
+<li>A container</li>
+<li>A slot for the drawer content</li>
+<li>A slot for the content</li>
+</ul>
+<p>The container will serve as a wrapper. It will help us with the styling of our internal parts. The content slot is our placeholder for the content that will be served in the slot. Often this will be navigation. Finally, we have a slot for application content. Here you will provide the main content of your application.</p>
+<h2 id="projectsetup">Project setup</h2>
+<p>As the focus of this article is on creating a drawer container I will provide a brief introduction on setting up a new project.</p>
+<p>First, we are going to create a new Stencil project, with some simple steps provided by the <a href="https://stenciljs.com/docs/getting-started">Getting Starred of Stencil</a></p>
+<p>Create a new project:</p>
+<pre><code class="bash language-bash"> npm init stencil
+</code></pre>
+<p>&nbsp;
+You will be prompt to choose a project type, choose <code>component</code></p>
+<pre><code class="bash language-bash">? Pick a starter › - Use arrow-keys. Return to submit.
+
+❯  ionic-pwa     Everything you need to build fast, production-ready PWAs
+   app           Minimal starter for building a Stencil app or website
+   component     Collection of web components that can be used anywhere
+</code></pre>
+<p>&nbsp;</p>
+<p>Now you need to provide a project name, let's fill in <code>example-drawer</code>. And that is it now we are ready to start working on our component.</p>
+<h2 id="code">Code</h2>
+<p>After opening the project in your favorite editor open the <code>my-component.tsx</code> file and remove all of the default code and replace it with the following:</p>
+<pre><code class="typescript language-typescript">import { Component, Host, h, State, Method } from '@stencil/core';
+
+@Component({
+  tag: 'my-component',
+  styleUrl: 'my-component.css',
+  shadow: true,
+})
+export class MyComponent {
+  /**
+   * Show or hide the drawer
+   */
+  @State() open = true;
+}
+</code></pre>
+<p>&nbsp;</p>
+<p>First, we set up some internal data with the use of <code>@State</code>. When changing the <code>State</code> property it will cause the components to render again.
+With this, we are going to toggle a CSS class.</p>
+<pre><code class="typescript language-typescript">import { Component, Host, h, State, Method } from '@stencil/core';
+
+@Component({
+  tag: 'my-component',
+  styleUrl: 'my-component.css',
+  shadow: true,
+})
+export class MyComponent {
+  @State() open = true;
+
+  @Method()
+  async toggleDrawer() {
+    this.open = !this.open;
+  }
+}
+</code></pre>
+<p>&nbsp;</p>
+<p>We have added a <code>@Method</code> decorator and a method that toggles the property <code>open</code>. Doing this allows us to call the <code>toggleDrawer</code> method from the outside of the component.</p>
+<pre><code class="typescript language-typescript">import { Component, Host, h, State, Method } from '@stencil/core';
+
+@Component({
+  tag: 'my-component',
+  styleUrl: 'my-component.css',
+  shadow: true,
+})
+export class MyComponent {
+  @State() open = true;
+
+  @Method()
+  async toggleDrawer() {
+    this.open = !this.open;
+  }
+  render() {
+    return (
+      &lt;Host&gt;
+        &lt;div class="drawer-container"&gt;
+          &lt;div class={{ drawer: true, open: this.open }}&gt;
+            &lt;div class="drawer-content"&gt;
+              &lt;slot name="drawer-content" /&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div class={{ content: true, left: !this.open }}&gt;
+            &lt;slot name="content" /&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/Host&gt;
+    );
+  }
+}
+</code></pre>
+<p>&nbsp;</p>
+<p>In this last part, we defined the HTML template. Earlier in this article, I said we would toggle some CSS classes based on the <code>State</code> property <code>open</code>. Now you can see what I meant with this. When the property <code>open</code> equals <code>true</code> the <code>open</code> class will be added to the div, similar behavior will be on the <code>content div</code> as shown in the code.</p>
+<p><img src="./assets/outside_of_view.png" alt="Drawer outside of the view" /></p>
+<p>Now open the <code>my-component.css</code> file and replace the code with:</p>
+<pre><code class="css language-css">:host {
+  display: block;
+  width: 100%;
+}
+
+.drawer-container {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid #ccc;
+}
+
+.drawer {
+  padding-right: 20px;
+  background: gray;
+  border-right: 1px solid #ccc;
+  position: relative;
+  width: 280px;
+  transform: translate3d(-100%, 0, 0);
+  z-index: 2;
+  box-sizing: border-box;
+  will-change: transform;
+}
+.drawer-content {
+  width: 100%;
+  height: 100%;
+}
+.drawer.open {
+  transform: none;
+}
+
+.content {
+  margin-left: 0px;
+  margin-right: 0px;
+  flex-grow: 1;
+  flex-shrink: 1;
+  display: block;
+  height: 100%;
+  overflow: auto;
+  will-change: contents;
+}
+.content.left {
+  margin-left: -280px;
+}
+</code></pre>
+<p>&nbsp;</p>
+<p>We will focus on the <code>open</code> and <code>left</code> behaviors. In our <code>drawer</code> class we have defined <code>transform: translate3d(-100%, 0, 0);</code>. This will place our div out of the view. When we append the <code>open</code> class we will set <code>transform</code> to <code>none</code>, now we have our div back on the screen.</p>
+<p>Our other focus point is the <code>left</code> class. Because the width of our drawer is fixed at <code>280px</code> we can use <code>margin-left</code> to "slide" to the left when this class is appended.</p>
+<h2 id="puttingitalltogether">Putting it all together</h2>
+<p>Now that we have all the parts together we have to do one more thing. When we created our new project <code>Stencil</code> provides us with an <code>index.html</code> within this file it has already created all thing for the "example" component.</p>
+<p>Yet because we made changes we should reflect these changes in the <code>index.html</code> file. To speed things up copy the code below and replace this in your <code>index.html</code> file.</p>
+<pre><code class="html language-html">&lt;!DOCTYPE html&gt;
+&lt;html dir="ltr" lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8" /&gt;
+    &lt;meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0"
+    /&gt;
+    &lt;title&gt;Stencil Component Starter&lt;/title&gt;
+
+    &lt;script type="module" src="/build/example-drawer.esm.js"&gt;&lt;/script&gt;
+    &lt;script nomodule src="/build/example-drawer.js"&gt;&lt;/script&gt;
+    &lt;style&gt;
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+    &lt;/style&gt;
+  &lt;/head&gt;
+  &lt;body&gt;
+    &lt;my-component&gt;
+      &lt;ul slot="drawer-content"&gt;
+        &lt;li&gt;Menu 1&lt;/li&gt;
+        &lt;li&gt;Menu 2&lt;/li&gt;
+        &lt;li&gt;Menu 3&lt;/li&gt;
+        &lt;li&gt;Menu 4&lt;/li&gt;
+        &lt;li&gt;Menu 5&lt;/li&gt;
+      &lt;/ul&gt;
+      &lt;div slot="content"&gt;
+        Main
+      &lt;/div&gt;
+    &lt;/my-component&gt;
+    &lt;button id="toggleBtn"&gt;Toggle drawer&lt;/button&gt;
+  &lt;/body&gt;
+  &lt;script&gt;
+    const btn = document.getElementById("toggleBtn");
+    const  = document.querySelector('my-component');
+       btn.addEventListener("click", () =&gt; {
+         drawer.toggleDrawer();
+       });
+  &lt;/script&gt;
+&lt;/html&gt;
+</code></pre>
+<p>&nbsp;</p>
+<p>What did we change? We have added an <em>unsorted list</em> that will be placed in slot: <code>drawer-content</code> and we have a <code>div</code> that will be placed in slot: <code>content</code>. To toggle our drawer we have added a simple button that <code>on-click</code> will call the <code>toggleDrawer</code> method on our <code>drawer</code></p>
+<h2 id="summary">Summary</h2>
+<p>So what did we do in summary? We have created a simple drawer that slides out of the view. We have created a drawer with basic styling that can be enhanced to your own needs.
+The great thing is it that we can use this drawer in <strong>ANY</strong> frontend application that is using Vanilla JS, Angular, React or Vue, etc.</p>
+<p>To see the full source have a look at <a href="https://github.com/Jefiozie/stencil-drawer">this repo</a></p>
+<p>I hope this article inspired you, gave you some insights on how to build a component with the use of <strong>Stencil</strong> and have had some fun!😁</p>
+<h2 id="athankyou">A Thank you</h2>
+<p>At last, a thank you to some people how reviewed my article</p>
+<ul>
+<li><a href="https://twitter.com/wesgrimes">Wes Grimes (@wesgrimes)</a></li>
+<li><a href="https://twitter.com/romulocintra">Romulo Cintra (@romulocintra)</a></li>
+</ul>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[DevOps, from Requirement to Production]]></title>
+            <guid>https://jefiozie.github.io/articles/article/journey-to-devops</guid>
+            <pubDate>Mon, 18 Feb 2019 00:00:00 GMT</pubDate>
+            <description><![CDATA[description 1]]></description>
+            <content:encoded><![CDATA[<hr />
+<p>title: 'DevOps, from Requirement to Production'
+description: 'description 1'
+date: '2019-02-18'
+tags: ['angular', 'devops']</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>Last December I have had to change to present a part of the journey to go from monolith to microservices in a DevOps way.
+In the video (that is in dutch) I present a perspective on how at my current company we go from Requirement to a Production enviroment.</p>
+<p>If you have any question just <a href="https://github.com/Jefiozie/personalblog/issues/new">click on this link</a> and I will try and answer your question.</p>
+<p><a href="https://youtu.be/mglACMD7kUM"><img src="https://img.youtube.com/vi/mglACMD7kUM/0.jpg" alt="From Requirement to Production" /></a></p>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[#TIL: Working with NX]]></title>
+            <guid>https://jefiozie.github.io/articles/article/working-with-nx</guid>
+            <pubDate>Mon, 14 Jan 2019 00:00:00 GMT</pubDate>
+            <content:encoded><![CDATA[<hr />
+<p>title: '#TIL: Working with NX'
+date: '2019-01-14'
+tags: ['angular', 'NX']</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>Today I upgraded one of our application to the most recent version NX. The upgrade itself was challenging as we are on a older version of NX. But after a couple of hours fixing some problems we where running on version <code>7.1.1</code>.</p>
+<p>When using the old way of running the test we could use to following command to run <strong>all</strong> tests:</p>
+<pre><code class="bash language-bash">$ npm run test
+or
+$ yarn test
+</code></pre>
+<p>After the upgrade this didn't work anymore. Looking at issue <a href="https://github.com/nrwl/nx/issues/514">#514</a> made some things clear. Below I have listed some example that where documented by <em>Viktor Savkin</em></p>
+<ul>
+<li>Running one project</li>
+</ul>
+<pre><code class="bash language-bash"> $ ng test myproject
+</code></pre>
+<ul>
+<li>Run all projects using affected:*, like this:</li>
+</ul>
+<pre><code class="bash language-bash">$ yarn affected:test --files=package.json
+</code></pre>
+<ul>
+<li>Test only that what is affected by your change:</li>
+</ul>
+<pre><code class="bash language-bash">$ yarn affected:test --base=master --head=HEAD
+</code></pre>
+<ul>
+<li>Doing the same in parallel:</li>
+</ul>
+<pre><code class="bash language-bash">$ yarn affected:test --base=master --head=HEAD --parallel
+</code></pre>]]></content:encoded>
+        </item>
+        <item>
+            <title><![CDATA[First post]]></title>
+            <guid>https://jefiozie.github.io/articles/article/first-blog</guid>
+            <pubDate>Fri, 04 Jan 2019 00:00:00 GMT</pubDate>
+            <content:encoded><![CDATA[<hr />
+<p>title: First post
+date: '2019-01-04'</p>
+<h2 id="publishedtrue">published: true</h2>
+<p>This is my first post on my new blog! How exciting!
+I hope I'll write a lot more interesting things in the future.</p>]]></content:encoded>
+        </item>
+    </channel>
+</rss>
